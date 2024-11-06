@@ -1,0 +1,76 @@
+version: '3.8'
+services:
+  postgres-user-db:
+    image: postgres:13
+    container_name: postgres-user-db
+    environment:
+      POSTGRES_DB: user-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Donmishu215
+    ports:
+      - "5433:5432"
+    networks:
+      - microservice-network
+
+  postgres-device-db:
+    image: postgres:13
+    container_name: postgres-device-db
+    environment:
+      POSTGRES_DB: device-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Donmishu215
+    ports:
+      - "5434:5432"
+    networks:
+      - microservice-network
+
+  user-service:
+    build: ./user
+    container_name: user-service
+    environment:
+      DB_IP: postgres-user-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: Donmishu215
+      DB_DBNAME: user-db
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres-user-db
+    networks:
+      - microservice-network
+
+  device-service:
+    build: ./device
+    container_name: device-service
+    environment:
+      DB_IP: postgres-device-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: Donmishu215
+      DB_DBNAME: device-db
+    ports:
+      - "8082:8080"
+    depends_on:
+      - postgres-device-db
+    networks:
+      - microservice-network
+  frontend-react:
+    build:
+      context: ./my-app
+      dockerfile: Dockerfile
+    container_name: frontend-react
+    ports:
+      - "3000:3000"
+    environment:
+      USER_SERVICE: user-service
+      DEVICE_SERVICE: device-service
+    depends_on:
+      - user-service
+      - device-service
+    networks:
+      - microservice-network
+
+networks:
+  microservice-network:
+    driver: bridge
