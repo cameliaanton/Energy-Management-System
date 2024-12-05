@@ -44,8 +44,10 @@ public class PersonServiceImpl implements PersonService {
 
     private final RestTemplate restTemplate;
 
-    //private final String deviceBackend="http://localhost:8080/devices/";
-    private final String deviceBackend="http://host.docker.internal:8082/devices/";
+    //private final String deviceBackend="http://localhost:8082/devices/";
+    //private final String deviceBackend="http://host.docker.internal:8082/devices/";
+    // http://device-service.localhost/devices
+    private final String deviceBackend="http://device-service:8080/devices/";
     // Create a new Person
     @Override
     public PersonDTO createPerson(PersonRegisterDTO personDTO) {
@@ -59,22 +61,22 @@ public class PersonServiceImpl implements PersonService {
     }
     @Override
     public LoginViewDTO login(LoginDTO loginDTO) {
-        System.out.println("find email");
+//        System.out.println("find email");
         Person person = personRepository.findByEmail(loginDTO.getEmail());
-        System.out.println("dupa find email");
+//        System.out.println("dupa find email");
         if (person == null) {
             throw new RuntimeException("Email not found");
         }
-        System.out.println("la parola");
+//        System.out.println("la parola");
         if (passwordEncoder.matches(loginDTO.getPersonPassword(), person.getPassword())) {
             // Authentication successful, generate JWT
-            System.out.println("generate jwt");
+//            System.out.println("generate jwt");
             String token = tokenProvider.generateAccessToken(person);
-            System.out.println("security");
+//            System.out.println("security");
             var authentication = new UsernamePasswordAuthenticationToken(person, null, person.getAuthorities());
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            System.out.println("return");
+//            System.out.println("return");
             return new LoginViewDTO(person.getId(), person.getRole(), token);
         } else {
             // Invalid password
@@ -139,7 +141,7 @@ public class PersonServiceImpl implements PersonService {
             return null; //arunca exceptie mai tarziu
         else {
             String url = deviceBackend+ "assign/" + person.get().getId();
-
+            System.out.println(url);
             DeviceDTO deviceDTO= new DeviceDTO();
             deviceDTO.setAddress(personDevicesDTO.getAddress());
             deviceDTO.setDescription(personDevicesDTO.getDescription());

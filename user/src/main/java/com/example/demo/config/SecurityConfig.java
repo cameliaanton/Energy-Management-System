@@ -29,30 +29,31 @@ public class SecurityConfig {
         this.securityFilter = securityFilter;
     }
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        return http
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(Customizer.withDefaults())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                        .requestMatchers(HttpMethod.POST,"/person/register").permitAll()
-                        .requestMatchers(HttpMethod.POST,"/person/login").permitAll()
-                        .anyRequest().authenticated()
-                )
-                .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class)
-                .cors(withDefaults -> withDefaults.configurationSource(corsConfigurationSource())) // Adăugăm configurația CORS
-                .build();
-    }
+//
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    return http
+            .csrf(AbstractHttpConfigurer::disable)
+            .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Configurăm CORS
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(authorize -> authorize
+                    .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/person/register").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/person/login").permitAll()
+                    .anyRequest().authenticated() // Protejăm toate celelalte rute
+            )
+            .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class)
+            .build();
+}
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000")); // Permite originea specifică
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE")); // Metodele permise
-        configuration.setAllowCredentials(true); // Permite credențialele (cookie-uri)
-        configuration.setAllowedHeaders(List.of("Authorization", "Cache-Control", "Content-Type"));
+        configuration.setAllowedOrigins(List.of("http://frontend-react.localhost:81", "http://localhost:3000")); // Permite originile frontend
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // Include metodele necesare
+        configuration.setAllowCredentials(true); // Permite cookie-uri și alte credențiale
+        configuration.setAllowedHeaders(List.of("*")); // Permite toate headerele
+        configuration.setExposedHeaders(List.of("Authorization", "Content-Type")); // Expune headerele necesare
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

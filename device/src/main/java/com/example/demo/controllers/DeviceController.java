@@ -37,6 +37,12 @@ public class DeviceController {
         Optional<DeviceDTO> personDTO = deviceService.getDeviceById(id);
         return personDTO.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
+    @GetMapping("/{id}/max-consumption")
+    public ResponseEntity<Double> getMaxConsumption(@PathVariable Long id){
+        Optional<DeviceDTO> personDTO = deviceService.getDeviceById(id);
+        Double maxConsumption= personDTO.get().getMaxEnergyConsumption();
+        return ResponseEntity.ok(maxConsumption);
+    }
     @PutMapping("/{id}")
     public ResponseEntity<DeviceDTO> updateDevice(@PathVariable Long id, @RequestBody DeviceUpdateDTO deviceDTO) {
         Optional<DeviceDTO> updatedPerson = deviceService.updateDevice(id, deviceDTO);

@@ -1,5 +1,23 @@
 version: '3.8'
 services:
+  reverse-proxy:
+    image: traefik:v3.2
+    command:
+      - --api.insecure=true
+      - --providers.docker
+      - --accesslog=true
+      - --accesslog.filepath=/var/log/traefik/access.log
+      - --log.level=DEBUG
+      - --entrypoints.web.address=:81
+    ports:
+      - "81:81"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - traefik_logs:/var/log/traefik
+    networks:
+      - microservice-network
+
   postgres-user-db:
     image: postgres:13
     container_name: postgres-user-db
@@ -7,8 +25,12 @@ services:
       POSTGRES_DB: user-db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Donmishu215
-    ports:
-      - "5433:5432"
+    # ports:
+    #   - "5433:5432"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.user-db.rule=Host(`user-db.localhost`)"
+      - "traefik.http.services.user-db.loadbalancer.server.port=5432"
     networks:
       - microservice-network
 
@@ -19,22 +41,59 @@ services:
       POSTGRES_DB: device-db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Donmishu215
+    # ports:
+    #   - "5434:5432"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.device-db.rule=Host(`device-db.localhost`)"
+      - "traefik.http.services.device-db.loadbalancer.server.port=5432"
+    networks:
+      - microservice-network
+
+  postgres-monitoring-db:
+    image: postgres:13
+    container_name: postgres-monitoring-db
+    environment:
+      POSTGRES_DB: monitoring-communication-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Donmishu215
+    # ports:
+    #   - "5435:5432"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monitoring-communication-db.rule=Host(`monitoring-communication-db.localhost`)"
+      - "traefik.http.services.monitoring-communication-db.loadbalancer.server.port=5432"
+    networks:
+      - microservice-network
+
+  rabbitmq:
+    image: rabbitmq:4.0.3-management
+    container_name: rabbitmq
     ports:
-      - "5434:5432"
+      - "5672:5672" # RabbitMQ messaging port
+      - "15672:15672" # RabbitMQ management console
     networks:
       - microservice-network
 
   user-service:
     build: ./user
-    container_name: user-service
+    # container_name: user-service
     environment:
       DB_IP: postgres-user-db
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: Donmishu215
       DB_DBNAME: user-db
-    ports:
-      - "8081:8080"
+    # ports:
+    #   - "8081:8080"
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.user-service.rule=Host(`user-service.localhost`)"
+      # - "traefik.http.middlewares.user-service-strip.stripprefix.prefixes=/user-service"
+      # - "traefik.http.routers.user-service.middlewares=user-service-strip"
+      - "traefik.http.services.user-service.loadbalancer.server.port=8080"
     depends_on:
       - postgres-user-db
     networks:
@@ -42,35 +101,86 @@ services:
 
   device-service:
     build: ./device
-    container_name: device-service
+    # container_name: device-service
     environment:
       DB_IP: postgres-device-db
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: Donmishu215
       DB_DBNAME: device-db
-    ports:
-      - "8082:8080"
+    # ports:
+    #   - "8082:8080"
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.device-service.rule=Host(`device-service.localhost`)"
+      - "traefik.http.services.device-service.loadbalancer.server.port=8080"
     depends_on:
       - postgres-device-db
     networks:
       - microservice-network
+
+  monitoring-service:
+    build: ./monitoring
+    # container_name: monitoring-service
+    environment:
+      DB_IP: postgres-monitoring-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: Donmishu215
+      DB_DBNAME: monitoring-communication-db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+    # ports:
+    #   - "8083:8080"
+    deploy:
+      replicas: 1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monitoring-service.rule=Host(`monitoring-service.localhost`)"
+      # - "traefik.http.middlewares.monitoring-service-strip.stripprefix.prefixes=/monitoring-service"
+      # - "traefik.http.routers.monitoring-service.middlewares=monitoring-service-strip"
+      - "traefik.http.services.monitoring-service.loadbalancer.server.port=8080"
+    depends_on:
+      - postgres-monitoring-db
+      - rabbitmq
+    networks:
+      - microservice-network
+
   frontend-react:
     build:
       context: ./my-app
       dockerfile: Dockerfile
-    container_name: frontend-react
-    ports:
-      - "3000:3000"
+    # container_name: frontend-react
+    # ports:
+    #   - "3000:80"
+    deploy:
+      replicas: 1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend-react.rule=Host(`frontend-react.localhost`)"
+      - "traefik.http.services.frontend-react.loadbalancer.server.port=80"
     environment:
-      USER_SERVICE: user-service
-      DEVICE_SERVICE: device-service
+      REACT_APP_USER_API_URL: user-service
+      # USER_SERVICE: user-service
+      REACT_APP_DEVICE_API_URL: device-service
+      # DEVICE_SERVICE: device-service
+      REACT_APP_MONITORING_API_URL: monitoring-service
+      # MONITORING_SERVICE: monitoring-service
+      REACT_APP_USER_PORT: 8080
+      REACT_APP_DEVICE_PORT: 8080
+      REACT_APP_MONITORING_PORT: 8080
     depends_on:
       - user-service
       - device-service
+      - monitoring-service
     networks:
       - microservice-network
 
 networks:
   microservice-network:
+    name: microservice-network
     driver: bridge
+volumes:
+  traefik_logs:
