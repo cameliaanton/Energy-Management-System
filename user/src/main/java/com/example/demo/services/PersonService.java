@@ -2,6 +2,7 @@ package com.example.demo.services;
 
 import com.example.demo.dtos.*;
 import com.example.demo.dtos.LoginDTO;
+import com.example.demo.entities.Person;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,4 +27,8 @@ public interface PersonService {
     Long addDevice(Long id, PersonDevicesDTO personDevicesDTO);
 
     List<DeviceDTO> getDevices(Long id);
+
+    List<Person> getUsers();
+
+    List<Person> getAdmins();
 }

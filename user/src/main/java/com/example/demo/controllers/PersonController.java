@@ -2,6 +2,7 @@ package com.example.demo.controllers;
 
 import com.example.demo.dtos.*;
 import com.example.demo.dtos.LoginDTO;
+import com.example.demo.entities.Person;
 import com.example.demo.services.PersonService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -61,5 +62,16 @@ public class PersonController {
     public ResponseEntity<List<DeviceDTO>> getDevices(@PathVariable Long id){
         List<DeviceDTO> devices= personService.getDevices(id);
         return ResponseEntity.ok(devices);
+    }
+
+    @GetMapping("/admins")
+    public ResponseEntity<List<Person>> getAdmins(){
+        List<Person> personList= personService.getAdmins();
+        return ResponseEntity.ok(personList);
+    }
+    @GetMapping("/users")
+    public ResponseEntity<List<Person>> getUsers(){
+        List<Person> people= personService.getUsers();
+        return ResponseEntity.ok(people);
     }
 }

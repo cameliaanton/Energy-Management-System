@@ -4,6 +4,7 @@ import com.example.rabbitmq.models.HourlyConsumption;
 import com.example.rabbitmq.models.Info;
 import com.example.rabbitmq.repository.HourlyConsumptionRepository;
 import com.example.rabbitmq.service.NotificationService;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -23,10 +24,7 @@ public class RabbitMQJsonConsumer {
     private final HourlyConsumptionRepository hourlyConsumptionRepository;
     private final NotificationService notificationService;
     private static final Integer READS_PER_HOUR = 6;
-    private Integer dataPerHour=0;
-
-    private final Map<String, Double> hourlyConsumptionMap = new HashMap<>();
-
+    private final Map<Long, DeviceData> deviceDataMap = new HashMap<>();
     public RabbitMQJsonConsumer(RestTemplate restTemplate, HourlyConsumptionRepository hourlyConsumptionRepository, NotificationService notificationService) {
         this.restTemplate = restTemplate;
         this.hourlyConsumptionRepository = hourlyConsumptionRepository;
@@ -34,38 +32,34 @@ public class RabbitMQJsonConsumer {
     }
 
     @RabbitListener(queues = "${rabbitmq.queue.jason.name}")
-    public void consumeJsonMessage(Info info){
+    public void consumeJsonMessage(Info info) {
+        LOGGER.info(String.format("Received JSON message -> %s", info.toString()));
 
-        LOGGER.info(String.format("Received JSON message -> %s",info.toString()));
+        long deviceId = info.getDeviceId();
+        DeviceData deviceData = deviceDataMap.computeIfAbsent(deviceId, id -> new DeviceData());
 
-        String deviceHourKey = String.valueOf(info.getDeviceId());
+        // Adăugăm valoarea curentă
+        deviceData.addMeasurement(info.getMeasurementValue());
 
-        double updatedConsumption = hourlyConsumptionMap.getOrDefault(deviceHourKey, 0.0) + info.getMeasurementValue();
-        hourlyConsumptionMap.put(deviceHourKey, updatedConsumption);
+        if (deviceData.getMeasurementCount() == READS_PER_HOUR) {
+            double averageConsumption = deviceData.calculateAverage();
 
-        dataPerHour++;
-        if (dataPerHour.equals(READS_PER_HOUR)) {
-            updatedConsumption/=READS_PER_HOUR;
+            LocalDateTime timestamp = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(info.getTimestamp()), ZoneId.systemDefault()
+            ).withMinute(0).withSecond(0).withNano(0);
 
-            LocalDateTime timestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(info.getTimestamp()), ZoneId.systemDefault())
-                    .withMinute(0)
-                    .withSecond(0)
-                    .withNano(0);
+            LOGGER.info(String.format("For hour %s the mean value for device %d was %f",
+                    timestamp, deviceId, averageConsumption));
 
-            LOGGER.info(String.format("For hour %s the mean value was %f", timestamp, updatedConsumption));
-
-            if (updatedConsumption > getMaxAllowedConsumption(info.getDeviceId())) {
-                notificationService.sendConsumptionAlert(info.getDeviceId(), updatedConsumption,getMaxAllowedConsumption(info.getDeviceId()));
+            if (averageConsumption > getMaxAllowedConsumption(deviceId)) {
+                notificationService.sendConsumptionAlert(deviceId, averageConsumption, getMaxAllowedConsumption(deviceId));
             }
 
-            hourlyConsumptionMap.put(deviceHourKey, (double) 0);
-            processHourlyConsumption(info.getDeviceId(), timestamp, updatedConsumption);
-
-            dataPerHour = 0;
+            // Procesăm media și resetăm datele pentru dispozitivul curent
+            processHourlyConsumption(deviceId, timestamp, averageConsumption);
+            deviceData.reset();
         }
-
     }
-
     private void processHourlyConsumption(Long deviceId, LocalDateTime timestamp, double consumption){
 
         HourlyConsumption hourlyConsumption= new HourlyConsumption(null,deviceId,timestamp,consumption);
@@ -85,6 +79,25 @@ public class RabbitMQJsonConsumer {
         }catch (Exception e){
             LOGGER.error("Error fetching maxAllowedConsumption for device " + deviceId, e);
             return Double.MAX_VALUE;
+        }
+    }
+    private static class DeviceData {
+        private double totalMeasurement = 0.0;
+        @Getter
+        private int measurementCount = 0;
+
+        public void addMeasurement(double value) {
+            totalMeasurement += value;
+            measurementCount++;
+        }
+
+        public double calculateAverage() {
+            return measurementCount == 0 ? 0.0 : totalMeasurement / measurementCount;
+        }
+
+        public void reset() {
+            totalMeasurement = 0.0;
+            measurementCount = 0;
         }
     }
 }

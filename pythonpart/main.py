@@ -84,6 +84,6 @@ if __name__ == "__main__":
         print("Usage: python main.py <device_id>")
         sys.exit(1)
     csv_file = 'sensor.csv'
-    start_date = "2024-11-05 09:00:00"  # Define your custom start date
+    start_date = "2024-12-10 09:00:00"  # Define your custom start date
     device_id=int(sys.argv[1])
     process_sensor_data(device_id, csv_file, start_date)

@@ -1,5 +1,6 @@
 package com.example.demo.config;
 
+import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.example.demo.entities.Person;
 import com.example.demo.handle.PersonNotFoundException;
 import com.example.demo.repositories.PersonRepository;
@@ -24,24 +25,30 @@ public class SecurityFilter extends OncePerRequestFilter {
     private final PersonRepository personRepository;
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        var token = this.recoverToken(request);
+        try{
+            var token = this.recoverToken(request);
 
-        if (token != null) {
-            Long personId = Long.parseLong(tokenProvider.validateToken(token));
-            System.out.println("Valid token: "+token);
-            Optional<Person> person = personRepository.findById(personId);
-            if (person.isPresent()) {
-                var personDetails = person.get(); // This should be UserDetails (Person implements it)
-                var authentication = new UsernamePasswordAuthenticationToken(personDetails, null, personDetails.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            } else {
-                System.out.println("uite ce rau sunt ");
-                throw new PersonNotFoundException("Person not found based on jwt");
+            if (token != null) {
+                Long personId = Long.parseLong(tokenProvider.validateToken(token));
+                System.out.println("Valid token: "+token);
+                Optional<Person> person = personRepository.findById(personId);
+                if (person.isPresent()) {
+                    var personDetails = person.get(); // This should be UserDetails (Person implements it)
+                    var authentication = new UsernamePasswordAuthenticationToken(personDetails, null, personDetails.getAuthorities());
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                } else {
+                    System.out.println("uite ce rau sunt ");
+                    throw new PersonNotFoundException("Person not found based on jwt");
+                }
+
             }
 
+            filterChain.doFilter(request, response);
+        }catch (JWTVerificationException | PersonNotFoundException ex){
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("Unauthorized: " + ex.getMessage());
         }
 
-        filterChain.doFilter(request, response);
     }
     private String recoverToken(HttpServletRequest request) {
         var authHeader = request.getHeader("Authorization");

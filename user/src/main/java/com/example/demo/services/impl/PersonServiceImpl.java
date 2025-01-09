@@ -10,15 +10,14 @@ import com.example.demo.entities.Role;
 import com.example.demo.handle.PersonNotFoundException;
 import com.example.demo.repositories.PersonRepository;
 import com.example.demo.services.PersonService;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -48,6 +47,7 @@ public class PersonServiceImpl implements PersonService {
     //private final String deviceBackend="http://host.docker.internal:8082/devices/";
     // http://device-service.localhost/devices
     private final String deviceBackend="http://device-service:8080/devices/";
+    //private final String deviceBackend="https://device-service.localhost/devices/";
     // Create a new Person
     @Override
     public PersonDTO createPerson(PersonRegisterDTO personDTO) {
@@ -73,7 +73,8 @@ public class PersonServiceImpl implements PersonService {
 //            System.out.println("generate jwt");
             String token = tokenProvider.generateAccessToken(person);
 //            System.out.println("security");
-            var authentication = new UsernamePasswordAuthenticationToken(person, null, person.getAuthorities());
+           // var authentication = new UsernamePasswordAuthenticationToken(person, null, person.getAuthorities());
+            var authentication = new UsernamePasswordAuthenticationToken(person, token, person.getAuthorities());
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
 //            System.out.println("return");
@@ -118,10 +119,10 @@ public class PersonServiceImpl implements PersonService {
         if (personRepository.existsById(id)) {
             try {
                 String url = deviceBackend + "person/" + id;
-                HttpHeaders headers = new HttpHeaders();
-                headers.set("Accept", "*/*");
-                HttpEntity<String> entity = new HttpEntity<>(headers);
-
+                //HttpHeaders headers = new HttpHeaders();
+                //headers.set("Accept", "*/*");
+                //HttpEntity<String> entity = new HttpEntity<>(headers);
+                HttpEntity<String> entity = new HttpEntity<>(null);
                 // Use exchange to send DELETE with headers
                 restTemplate.exchange(url, HttpMethod.DELETE, entity, Void.class);
             } catch (RestClientException e) {
@@ -149,17 +150,47 @@ public class PersonServiceImpl implements PersonService {
             return restTemplate.postForObject(url,deviceDTO,Long.class);
         }
     }
-
     @Override
     public List<DeviceDTO> getDevices(Long id) {
-        Optional<Person> person= personRepository.findById(id);
-        if(person.isEmpty())
+        Optional<Person> person = personRepository.findById(id);
+        if (person.isEmpty()) {
             throw new PersonNotFoundException("Person with ID " + id + " not found.");
-        else {
-            String url = deviceBackend+"person/" + person.get().getId();
+        } else {
+            String url = deviceBackend + "person/" + person.get().getId();
+            HttpHeaders headers = new HttpHeaders();
 
-            return restTemplate.exchange(url, HttpMethod.GET, null, new ParameterizedTypeReference<List<DeviceDTO>>() {}).getBody();
+            // Adaugă JWT-ul din SecurityContextHolder
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.getCredentials() instanceof String) {
+                String jwtToken = (String) authentication.getCredentials();
+                headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken);
+            }
+
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            return restTemplate.exchange(url, HttpMethod.GET, entity, new ParameterizedTypeReference<List<DeviceDTO>>() {}).getBody();
         }
+    }
+
+//    @Override
+//    public List<DeviceDTO> getDevices(Long id) {
+//        Optional<Person> person= personRepository.findById(id);
+//        if(person.isEmpty())
+//            throw new PersonNotFoundException("Person with ID " + id + " not found.");
+//        else {
+//            String url = deviceBackend+"person/" + person.get().getId();
+//
+//            return restTemplate.exchange(url, HttpMethod.GET, null, new ParameterizedTypeReference<List<DeviceDTO>>() {}).getBody();
+//        }
+//    }
+
+    @Override
+    public List<Person> getUsers() {
+        return personRepository.findByRole(Role.CLIENT);
+    }
+
+    @Override
+    public List<Person> getAdmins() {
+        return personRepository.findByRole(Role.ADMIN);
     }
 
 }

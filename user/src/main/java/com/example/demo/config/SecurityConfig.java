@@ -18,6 +18,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Collections;
 import java.util.List;
 
 @Configuration
@@ -49,7 +50,7 @@ public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Excepti
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://frontend-react.localhost:81", "http://localhost:3000")); // Permite originile frontend
+        configuration.setAllowedOrigins(List.of("http://frontend-react.localhost:81", "http://localhost:3000","https://frontend-react.localhost:443","https://frontend-react.localhost")); // Permite originile frontend
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // Include metodele necesare
         configuration.setAllowCredentials(true); // Permite cookie-uri și alte credențiale
         configuration.setAllowedHeaders(List.of("*")); // Permite toate headerele
@@ -71,7 +72,15 @@ public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Excepti
     }
 
     @Bean
-    public RestTemplate restTemplate(){
-        return new RestTemplate();
+    public RestTemplate restTemplate() {
+        RestTemplate restTemplate = new RestTemplate();
+
+        restTemplate.setInterceptors(Collections.singletonList(new JwtInterceptor()));
+
+        return restTemplate;
     }
+//    @Bean
+//    public RestTemplate restTemplate(){
+//        return new RestTemplate();
+//    }
 }

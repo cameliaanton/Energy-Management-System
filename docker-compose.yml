@@ -1,20 +1,23 @@
 version: '3.8'
 services:
+
   reverse-proxy:
     image: traefik:v3.2
     command:
       - --api.insecure=true
       - --providers.docker
-      - --accesslog=true
-      - --accesslog.filepath=/var/log/traefik/access.log
-      - --log.level=DEBUG
+      - --providers.file.directory=/etc/traefik/dynamic
       - --entrypoints.web.address=:81
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls=true
     ports:
       - "81:81"
       - "8080:8080"
+      - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - traefik_logs:/var/log/traefik
+      - ./dynamic:/etc/traefik/dynamic
+      - ./certs:/certs:ro
     networks:
       - microservice-network
 
@@ -25,11 +28,11 @@ services:
       POSTGRES_DB: user-db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Donmishu215
-    # ports:
-    #   - "5433:5432"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.user-db.rule=Host(`user-db.localhost`)"
+      - "traefik.http.routers.user-db.entrypoints=websecure"
+      - "traefik.http.routers.user-db.tls=true"
       - "traefik.http.services.user-db.loadbalancer.server.port=5432"
     networks:
       - microservice-network
@@ -41,11 +44,11 @@ services:
       POSTGRES_DB: device-db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Donmishu215
-    # ports:
-    #   - "5434:5432"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.device-db.rule=Host(`device-db.localhost`)"
+      - "traefik.http.routers.device-db.entrypoints=websecure"
+      - "traefik.http.routers.device-db.tls=true"
       - "traefik.http.services.device-db.loadbalancer.server.port=5432"
     networks:
       - microservice-network
@@ -57,12 +60,28 @@ services:
       POSTGRES_DB: monitoring-communication-db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Donmishu215
-    # ports:
-    #   - "5435:5432"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.monitoring-communication-db.rule=Host(`monitoring-communication-db.localhost`)"
+      - "traefik.http.routers.monitoring-communication-db.entrypoints=websecure"
+      - "traefik.http.routers.monitoring-communication-db.tls=true"
       - "traefik.http.services.monitoring-communication-db.loadbalancer.server.port=5432"
+    networks:
+      - microservice-network
+
+  postgres-chat-db:
+    image: postgres:13
+    container_name: postgres-chat-db
+    environment:
+      POSTGRES_DB: chat-db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Donmishu215
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.chat-db.rule=Host(`chat-db.localhost`)"
+      - "traefik.http.routers.chat-db.entrypoints=websecure"
+      - "traefik.http.routers.chat-db.tls=true"
+      - "traefik.http.services.chat-db.loadbalancer.server.port=5432"
     networks:
       - microservice-network
 
@@ -77,22 +96,23 @@ services:
 
   user-service:
     build: ./user
-    # container_name: user-service
     environment:
       DB_IP: postgres-user-db
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: Donmishu215
       DB_DBNAME: user-db
-    # ports:
-    #   - "8081:8080"
+      JWT_SECRET: ${JWT_SECRET}
     deploy:
       replicas: 2
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.user-service.rule=Host(`user-service.localhost`)"
-      # - "traefik.http.middlewares.user-service-strip.stripprefix.prefixes=/user-service"
-      # - "traefik.http.routers.user-service.middlewares=user-service-strip"
+      - "traefik.http.routers.user-service-http.rule=Host(`user-service.localhost`)"
+      - "traefik.http.routers.user-service-http.entrypoints=web"
+      #- "traefik.http.routers.user-service-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.user-service-https.rule=Host(`user-service.localhost`)"
+      - "traefik.http.routers.user-service-https.entrypoints=websecure"
+      - "traefik.http.routers.user-service-https.tls=true"
       - "traefik.http.services.user-service.loadbalancer.server.port=8080"
     depends_on:
       - postgres-user-db
@@ -101,20 +121,23 @@ services:
 
   device-service:
     build: ./device
-    # container_name: device-service
     environment:
       DB_IP: postgres-device-db
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: Donmishu215
       DB_DBNAME: device-db
-    # ports:
-    #   - "8082:8080"
+      JWT_SECRET: ${JWT_SECRET}
     deploy:
       replicas: 2
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.device-service.rule=Host(`device-service.localhost`)"
+      - "traefik.http.routers.device-service-http.rule=Host(`device-service.localhost`)"
+      - "traefik.http.routers.device-service-http.entrypoints=web"
+      #- "traefik.http.routers.device-service-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.device-service-https.rule=Host(`device-service.localhost`)"
+      - "traefik.http.routers.device-service-https.entrypoints=websecure"
+      - "traefik.http.routers.device-service-https.tls=true"
       - "traefik.http.services.device-service.loadbalancer.server.port=8080"
     depends_on:
       - postgres-device-db
@@ -123,7 +146,6 @@ services:
 
   monitoring-service:
     build: ./monitoring
-    # container_name: monitoring-service
     environment:
       DB_IP: postgres-monitoring-db
       DB_PORT: 5432
@@ -132,15 +154,17 @@ services:
       DB_DBNAME: monitoring-communication-db
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-    # ports:
-    #   - "8083:8080"
+      JWT_SECRET: ${JWT_SECRET}
     deploy:
       replicas: 1
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.monitoring-service.rule=Host(`monitoring-service.localhost`)"
-      # - "traefik.http.middlewares.monitoring-service-strip.stripprefix.prefixes=/monitoring-service"
-      # - "traefik.http.routers.monitoring-service.middlewares=monitoring-service-strip"
+      - "traefik.http.routers.monitoring-service-http.rule=Host(`monitoring-service.localhost`)"
+      - "traefik.http.routers.monitoring-service-http.entrypoints=web"
+      #- "traefik.http.routers.monitoring-service-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.monitoring-service-https.rule=Host(`monitoring-service.localhost`)"
+      - "traefik.http.routers.monitoring-service-https.entrypoints=websecure"
+      - "traefik.http.routers.monitoring-service-https.tls=true"
       - "traefik.http.services.monitoring-service.loadbalancer.server.port=8080"
     depends_on:
       - postgres-monitoring-db
@@ -148,33 +172,60 @@ services:
     networks:
       - microservice-network
 
+  chat-service:
+    build: ./chat
+    environment:
+      DB_IP: postgres-chat-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: Donmishu215
+      DB_DBNAME: chat-db
+      JWT_SECRET: ${JWT_SECRET}
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.chat-service-http.rule=Host(`chat-service.localhost`)"
+      - "traefik.http.routers.chat-service-http.entrypoints=web"
+      #- "traefik.http.routers.chat-service-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.chat-service-https.rule=Host(`chat-service.localhost`)"
+      - "traefik.http.routers.chat-service-https.entrypoints=websecure"
+      - "traefik.http.routers.chat-service-https.tls=true"
+      - "traefik.http.services.chat-service.loadbalancer.server.port=8080"
+    depends_on:
+      - postgres-chat-db
+    networks:
+      - microservice-network
+
   frontend-react:
     build:
       context: ./my-app
       dockerfile: Dockerfile
-    # container_name: frontend-react
-    # ports:
-    #   - "3000:80"
     deploy:
       replicas: 1
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend-react.rule=Host(`frontend-react.localhost`)"
+      - "traefik.http.routers.frontend-react-http.rule=Host(`frontend-react.localhost`)"
+      - "traefik.http.routers.frontend-react-http.entrypoints=web"
+      #- "traefik.http.routers.frontend-react-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.frontend-react-https.rule=Host(`frontend-react.localhost`)"
+      - "traefik.http.routers.frontend-react-https.entrypoints=websecure"
+      - "traefik.http.routers.frontend-react-https.tls=true"
       - "traefik.http.services.frontend-react.loadbalancer.server.port=80"
     environment:
       REACT_APP_USER_API_URL: user-service
-      # USER_SERVICE: user-service
       REACT_APP_DEVICE_API_URL: device-service
-      # DEVICE_SERVICE: device-service
       REACT_APP_MONITORING_API_URL: monitoring-service
-      # MONITORING_SERVICE: monitoring-service
+      REACT_APP_CHAT_API_URL: chat-service
       REACT_APP_USER_PORT: 8080
       REACT_APP_DEVICE_PORT: 8080
       REACT_APP_MONITORING_PORT: 8080
+      REACT_APP_CHAT_PORT: 8080
     depends_on:
       - user-service
       - device-service
       - monitoring-service
+      - chat-service
     networks:
       - microservice-network
 
@@ -182,5 +233,6 @@ networks:
   microservice-network:
     name: microservice-network
     driver: bridge
+
 volumes:
   traefik_logs:

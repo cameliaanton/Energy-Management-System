@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.example.demo.entities.Person;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +16,11 @@ import java.time.ZoneOffset;
 public class TokenProvider {
     @Value("${jwt.secret}")
     private String JWT_SECRET;
+
+//    @PostConstruct
+//    public void init() {
+//        System.out.println("Injected JWT_SECRET: " + JWT_SECRET);
+//    }
 
     public String generateAccessToken(Person person){
         Algorithm algorithm=Algorithm.HMAC256(JWT_SECRET);
@@ -36,6 +42,6 @@ public class TokenProvider {
         }
     }
     private Instant genAccessExpirationDate() {
-        return LocalDateTime.now().plusHours(3).toInstant(ZoneOffset.of("-03:00"));
+        return LocalDateTime.now().plusHours(7).toInstant(ZoneOffset.of("-03:00"));
     }
 }
