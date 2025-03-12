@@ -1,0 +1,1 @@
+my-app filter=lfs diff=lfs merge=lfs -text
